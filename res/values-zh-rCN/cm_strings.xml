@@ -78,5 +78,20 @@
     <string name="voice_quality_entry_clear">清晰</string>
     <string name="voice_quality_entry_crisp">清脆</string>
     <string name="voice_quality_entry_bright">明亮</string>
-    <string name="enter_input">USSD 信息必须要在 <xliff:g id="min_len" >%d</xliff:g> 与 <xliff:g id="max_len" >%d</xliff:g> 字符之间. 请重新尝试.</string>
+    <string name="phone_number_label">我的电话号码</string>
+    <string name="phone_number_summary">设置此设备的电话号码</string>
+
+    <!-- Engle,  添加IP拨号支持 -->
+    <string name="ip_phone_setting_dialog_title">IP电话设置</string>
+    <string name="ip_phone_setting_dialog_enable">启用IP电话</string>
+    <string name="ip_phone_setting_dialog_ip_number">输入IP号码</string>
+    
+    <!-- Engle, 添加电话归属地 -->
+    <string name="dialer_ui_geo_label_format" formatted="false">%S 归属地: %S</string>
+
+    <!-- Engle, 添加感应接听来电 -->
+    <string name="proximity_accept_ring_sum">将手机贴近面部将自动接听来电</string>
+    <string name="proximity_accept_ring_title">启用感应接听来电</string>
+    <!-- Engle, 添加通话录音 -->
+    <string name="onscreenRecordText">通话录音</string>
 </resources>

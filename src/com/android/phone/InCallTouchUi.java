@@ -103,6 +103,9 @@ public class InCallTouchUi extends FrameLayout
     private View mHoldSwapSpacer;
     private View mBlacklistSpacer;
 
+    // Engle, 添加通话录音
+    private CompoundButton mRecordButton;
+
     // "Extra button row"
     private ViewStub mExtraButtonRow;
     private ViewGroup mCdmaMergeButton;
@@ -195,6 +198,11 @@ public class InCallTouchUi extends FrameLayout
         mSwapButton.setOnLongClickListener(this);
         mHoldSwapSpacer = mInCallControls.findViewById(R.id.holdSwapSpacer);
         mBlacklistSpacer = mInCallControls.findViewById(R.id.blacklistSpacer);
+
+        // Engle, 添加通话录音
+        mRecordButton = (CompoundButton) mInCallControls.findViewById(R.id.recordButton);
+        mRecordButton.setOnClickListener(this);
+        mRecordButton.setOnLongClickListener(this);
 
         // Blacklist functionality
         mAddBlacklistButton = (ImageButton) mInCallControls.findViewById(R.id.addBlacklistButton);
@@ -406,6 +414,8 @@ public class InCallTouchUi extends FrameLayout
             case R.id.endButton:
             case R.id.dialpadButton:
             case R.id.muteButton:
+            // Engle, 添加通话录音
+            case R.id.recordButton:
             case R.id.holdButton:
             case R.id.swapButton:
             case R.id.cdmaMergeButton:
@@ -436,6 +446,8 @@ public class InCallTouchUi extends FrameLayout
             case R.id.mergeButton:
             case R.id.dialpadButton:
             case R.id.muteButton:
+            // Engle, 添加通话录音
+            case R.id.recordButton:
             case R.id.holdButton:
             case R.id.swapButton:
             case R.id.audioButton: {
@@ -548,6 +560,10 @@ public class InCallTouchUi extends FrameLayout
         // "Mute"
         mMuteButton.setEnabled(inCallControlState.canMute);
         mMuteButton.setChecked(inCallControlState.muteIndicatorOn);
+
+        // Engle, 添加通话录音
+        mRecordButton.setEnabled(inCallControlState.canRecord);
+        mRecordButton.setChecked(inCallControlState.recordIndicatorOn);
 
         // "Audio"
         updateAudioButton(inCallControlState);
@@ -685,6 +701,8 @@ public class InCallTouchUi extends FrameLayout
         log(" - dialpad: " + getButtonState(mDialpadButton));
         log(" - speaker: " + getButtonState(mAudioButton));
         log(" - mute: " + getButtonState(mMuteButton));
+        // Engle, 添加通话录音
+        log(" - record:" + getButtonState(mRecordButton));
         log(" - hold: " + getButtonState(mHoldButton));
         log(" - swap: " + getButtonState(mSwapButton));
         log(" - add: " + getButtonState(mAddButton));

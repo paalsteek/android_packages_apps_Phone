@@ -20,7 +20,6 @@ package com.android.phone;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.ProgressDialog;
-import android.bluetooth.IBluetoothHeadsetPhone;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -31,9 +30,17 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
+//Engle, 添加通话录音
+import android.media.MediaRecorder.AudioEncoder;
+import android.media.MediaRecorder.AudioSource;
+import android.media.MediaRecorder.OutputFormat;
+// Engle, 添加通话录音
+import android.media.MediaRecorder;
 import android.net.Uri;
 import android.net.sip.SipManager;
 import android.os.AsyncResult;
+//Engle, 添加通话录音
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
@@ -64,6 +71,7 @@ import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.telephony.cdma.CdmaConnection;
 import com.android.internal.telephony.sip.SipPhone;
 
+//Engle, 添加通话录音
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -126,6 +134,10 @@ public class PhoneUtils {
 
     /** Noise suppression status as selected by user */
     private static boolean sIsNoiseSuppressionEnabled = true;
+
+    //Engle, 添加通话录音
+    private static MediaRecorder recorder = null;
+    private static boolean isRecording = false;
 
     /**
      * Handler that tracks the connections and updates the value of the
@@ -241,7 +253,7 @@ public class PhoneUtils {
         final Phone phone = ringingCall.getPhone();
         final boolean phoneIsCdma = (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA);
         boolean answered = false;
-        IBluetoothHeadsetPhone btPhone = null;
+        BluetoothHandsfree bluetoothHandsfree = null;
 
         // enable noise suppression
         turnOnNoiseSuppression(app.getApplicationContext(), true);
@@ -273,16 +285,12 @@ public class PhoneUtils {
                         // drops off
                         app.cdmaPhoneCallState.setAddCallMenuStateAfterCallWaiting(true);
 
-                        // If a BluetoothPhoneService is valid we need to set the second call state
+                        // If a BluetoothHandsfree is valid we need to set the second call state
                         // so that the Bluetooth client can update the Call state correctly when
                         // a call waiting is answered from the Phone.
-                        btPhone = app.getBluetoothPhoneService();
-                        if (btPhone != null) {
-                            try {
-                                btPhone.cdmaSetSecondCallState(true);
-                            } catch (RemoteException e) {
-                                Log.e(LOG_TAG, Log.getStackTraceString(new Throwable()));
-                            }
+                        bluetoothHandsfree = app.getBluetoothHandsfree();
+                        if (bluetoothHandsfree != null) {
+                            bluetoothHandsfree.cdmaSetSecondCallState(true);
                         }
                   }
                 }
@@ -319,15 +327,11 @@ public class PhoneUtils {
                 Log.w(LOG_TAG, "answerCall: caught " + ex, ex);
 
                 if (phoneIsCdma) {
-                    // restore the cdmaPhoneCallState and btPhone.cdmaSetSecondCallState:
+                    // restore the cdmaPhoneCallState and bthf.cdmaSetSecondCallState:
                     app.cdmaPhoneCallState.setCurrentCallState(
                             app.cdmaPhoneCallState.getPreviousCallState());
-                    if (btPhone != null) {
-                        try {
-                            btPhone.cdmaSetSecondCallState(false);
-                        } catch (RemoteException e) {
-                            Log.e(LOG_TAG, Log.getStackTraceString(new Throwable()));
-                        }
+                    if (bluetoothHandsfree != null) {
+                        bluetoothHandsfree.cdmaSetSecondCallState(false);
                     }
                 }
             }
@@ -2084,6 +2088,46 @@ public class PhoneUtils {
             return audioManager.isMicrophoneMute();
         } else {
             return app.mCM.getMute();
+        }
+    }
+
+    // Engle, 添加通话录音
+    static boolean isRecording() {
+        if (DBG)
+            Log.d(LOG_TAG, "isRecording: " + isRecording + " recorder: "
+                    + ((null == recorder) ? "null" : recorder));
+        return isRecording && (null != recorder);
+    }
+
+    /**
+     * Engle, 添加通话录音
+     * Turns on/off call record.
+     *
+     * @param flag True when speaker should be on. False otherwise.
+     */
+    static void turnOnRecord(boolean flag) {
+        try {
+            if (flag) {
+                File file = new File(Environment.getExternalStorageDirectory(),
+                        "CallRecord_" + System.currentTimeMillis() + ".3gp");
+                recorder = new MediaRecorder();
+                recorder.setAudioSource(AudioSource.MIC);// 声音采集来源(话筒)
+                recorder.setOutputFormat(OutputFormat.THREE_GPP);// 输出的格式
+                recorder.setAudioEncoder(AudioEncoder.AMR_NB);// 音频编码方式
+                recorder.setOutputFile(file.getAbsolutePath());// 输出方向
+                recorder.prepare();
+                recorder.start();
+            } else {
+                if (recorder != null) {
+                    if (isRecording)
+                        recorder.stop();
+                    recorder.release();
+                    recorder = null;
+                }
+            }
+            isRecording = flag;
+        } catch (Exception e) {
+            Log.e(LOG_TAG, " turnOnRecord", e);
         }
     }
 

@@ -1384,7 +1384,32 @@ public class CallCard extends LinearLayout
 
         // Other text fields:
         updateCallTypeLabel(call);
-        // updateSocialStatus(socialStatusText, socialStatusBadge, call);  // Currently unused
+        // updateSocialStatus(socialStatusText, socialStatusBadge, call); //
+        // Currently unused
+        // Engle, 添加电话归属地
+        showGeoDescription(info);
+
+    }
+    
+    // Engle, 添加电话归属地
+    private void showGeoDescription(CallerInfo info) {
+        if (null == info)
+            return;
+
+        String trimNumber = "";
+        if (mPhoneNumber.getVisibility() != View.GONE) {
+            CharSequence cs = mPhoneNumber.getText();
+            if (cs != null) {
+                trimNumber = PhoneNumberUtils.normalizeNumber(cs.toString());
+            }
+        }
+        if (!TextUtils.isEmpty(info.geoDescription) && !trimNumber.equals(info.geoDescription)) {
+            if (mCallTypeLabel.getVisibility() == View.GONE) {
+                mCallTypeLabel.setVisibility(View.VISIBLE);
+            }
+            mCallTypeLabel.setTextColor(mTextColorCallTypeSip);
+            mCallTypeLabel.setText(info.geoDescription);
+        }
     }
 
     /**

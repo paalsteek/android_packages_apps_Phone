@@ -25,7 +25,6 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.IBluetoothHeadsetPhone;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -79,6 +78,10 @@ import com.android.internal.telephony.util.BlacklistUtils;
 import com.android.phone.Constants.CallStatusCode;
 import com.android.phone.InCallUiState.InCallScreenMode;
 import com.android.phone.OtaUtils.CdmaOtaScreenState;
+
+// Engle, 添加感应接听来电
+import android.preference.PreferenceManager;
+import android.provider.Settings;
 
 import java.util.List;
 
@@ -289,6 +292,7 @@ public class InCallScreen extends Activity
     // based on the current foreground Call.)
     private Phone mPhone;
 
+    private BluetoothHandsfree mBluetoothHandsfree;
     private BluetoothHeadset mBluetoothHeadset;
     private BluetoothAdapter mBluetoothAdapter;
     private boolean mBluetoothConnectionPending;
@@ -352,6 +356,14 @@ public class InCallScreen extends Activity
         EARPIECE,   // Handset earpiece (or wired headset, if connected)
     }
 
+    // Engle, 添加接近传感器接听来电
+    private boolean mProximityRingingCall = false;
+    private SensorEventListener mProximityListener;
+    private long mLastProximityEventTime = 0;
+    // For debouncing the proximity sensor in milliseconds
+    private static final int PROXIMITY_SENSOR_DELAY = 2000;
+    // trigger proximity if distance is less than 4 cm
+    private static final float PROXIMITY_THRESHOLD = 4.0f;
 
     private Handler mHandler = new Handler() {
         @Override
@@ -575,8 +587,14 @@ public class InCallScreen extends Activity
         mCM =  mApp.mCM;
         log("- onCreate: phone state = " + mCM.getState());
 
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (mBluetoothAdapter != null) {
+        mBluetoothHandsfree = mApp.getBluetoothHandsfree();
+        if (VDBG) log("- mBluetoothHandsfree: " + mBluetoothHandsfree);
+
+        if (mBluetoothHandsfree != null) {
+            // The PhoneApp only creates a BluetoothHandsfree instance in the
+            // first place if BluetoothAdapter.getDefaultAdapter()
+            // succeeds.  So at this point we know the device is BT-capable.
+            mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             mBluetoothAdapter.getProfileProxy(getApplicationContext(), mBluetoothProfileServiceListener,
                                     BluetoothProfile.HEADSET);
         }
@@ -646,6 +664,11 @@ public class InCallScreen extends Activity
         super.onResume();
 
         mFlipAction = PhoneUtils.PhoneSettings.flipAction(this);
+
+        // Engle, 添加感应接听来电
+        mProximityRingingCall = PreferenceManager.getDefaultSharedPreferences(this)
+                .getBoolean(CallFeaturesSetting.USE_PROXIMITY_ACTION, false);
+        attachProximityListener();
 
         mIsForegroundActivity = true;
         mIsForegroundActivityForProximity = true;
@@ -871,6 +894,9 @@ public class InCallScreen extends Activity
         if (DBG) log("onPause()...");
         super.onPause();
         detachListeners();
+
+        // Engle, 添加感应接听来电
+        detachProximityListener();
 
         if (mPowerManager.isScreenOn()) {
             // Set to false when the screen went background *not* by screen turned off. Probably
@@ -1650,6 +1676,11 @@ public class InCallScreen extends Activity
 
             case KeyEvent.KEYCODE_MUTE:
                 onMuteClick();
+                return true;
+
+            // Engle, 添加通话录音
+            case KeyEvent.KEYCODE_MEDIA_RECORD:
+                onRecordClick();
                 return true;
 
             // Various testing/debugging features, enabled ONLY when VDBG == true.
@@ -2989,6 +3020,14 @@ public class InCallScreen extends Activity
         PhoneUtils.setMute(newMuteState);
     }
 
+    // Engle, 添加通话录音
+    private void onRecordClick() {
+        boolean newRecordState = !PhoneUtils.isRecording();
+        if (DBG)
+            log("onRecordClick(): newRecordState = " + newRecordState);
+        PhoneUtils.turnOnRecord(newRecordState);
+    }
+
     /**
      * Toggles whether or not to route in-call audio to the bluetooth
      * headset, or do nothing (but log a warning) if no bluetooth device
@@ -3176,6 +3215,11 @@ public class InCallScreen extends Activity
                 break;
             case R.id.addBlacklistButton:
                 confirmAddBlacklist();
+                break;
+
+            // Engle, 添加通话录音
+            case R.id.recordButton:
+                onRecordClick();
                 break;
 
             default:
@@ -3837,17 +3881,13 @@ public class InCallScreen extends Activity
         // multiple background calls, for now, always act on the first background calll.
         PhoneUtils.switchHoldingAndActive(mCM.getFirstActiveBgCall());
 
-        // If we have a valid BluetoothPhoneService then since CDMA network or
+        // If we have a valid BluetoothHandsfree then since CDMA network or
         // Telephony FW does not send us information on which caller got swapped
-        // we need to update the second call active state in BluetoothPhoneService internally
+        // we need to update the second call active state in BluetoothHandsfree internally
         if (mCM.getBgPhone().getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA) {
-            IBluetoothHeadsetPhone btPhone = mApp.getBluetoothPhoneService();
-            if (btPhone != null) {
-                try {
-                    btPhone.cdmaSwapSecondCallState();
-                } catch (RemoteException e) {
-                    Log.e(LOG_TAG, Log.getStackTraceString(new Throwable()));
-                }
+            BluetoothHandsfree bthf = mApp.getBluetoothHandsfree();
+            if (bthf != null) {
+                bthf.cdmaSwapSecondCallState();
             }
         }
 
@@ -4258,6 +4298,13 @@ public class InCallScreen extends Activity
     //   headset (which we don't do from the Phone UI!) but also lets you
     //   get the address of the currently active headset and see whether
     //   it's currently connected.
+    //
+    // - BluetoothHandsfree is the API to control the audio connection to
+    //   a bluetooth headset. We use this API to switch the headset on and
+    //   off when the user presses the "Bluetooth" button.
+    //   Our BluetoothHandsfree instance (mBluetoothHandsfree) is created
+    //   by the PhoneApp and will be null if the device is not BT capable.
+    //
 
     /**
      * @return true if the Bluetooth on/off switch in the UI should be
@@ -4266,6 +4313,11 @@ public class InCallScreen extends Activity
      */
     /* package */ boolean isBluetoothAvailable() {
         if (VDBG) log("isBluetoothAvailable()...");
+        if (mBluetoothHandsfree == null) {
+            // Device is not BT capable.
+            if (VDBG) log("  ==> FALSE (not BT capable)");
+            return false;
+        }
 
         // There's no need to ask the Bluetooth system service if BT is enabled:
         //
@@ -4302,20 +4354,14 @@ public class InCallScreen extends Activity
     }
 
     /**
-     * @return true if a BT Headset is available, and its audio is currently connected.
+     * @return true if a BT device is available, and its audio is currently connected.
      */
     /* package */ boolean isBluetoothAudioConnected() {
-        if (mBluetoothHeadset == null) {
-            if (VDBG) log("isBluetoothAudioConnected: ==> FALSE (null mBluetoothHeadset)");
+        if (mBluetoothHandsfree == null) {
+            if (VDBG) log("isBluetoothAudioConnected: ==> FALSE (null mBluetoothHandsfree)");
             return false;
         }
-        List<BluetoothDevice> deviceList = mBluetoothHeadset.getConnectedDevices();
-
-        if (deviceList.isEmpty()) {
-            return false;
-        }
-        BluetoothDevice device = deviceList.get(0);
-        boolean isAudioOn = mBluetoothHeadset.isAudioConnected(device);
+        boolean isAudioOn = mBluetoothHandsfree.isAudioOn();
         if (VDBG) log("isBluetoothAudioConnected: ==> isAudioOn = " + isAudioOn);
         return isAudioOn;
     }
@@ -4325,7 +4371,7 @@ public class InCallScreen extends Activity
      * see InCallControlState.bluetoothIndicatorOn.
      *
      * @return true if a BT device is available and its audio is currently connected,
-     *              <b>or</b> if we issued a BluetoothHeadset.connectAudio()
+     *              <b>or</b> if we issued a BluetoothHandsfree.userWantsAudioOn()
      *              call within the last 5 seconds (which presumably means
      *              that the BT audio connection is currently being set
      *              up, and will be connected soon.)
@@ -4379,7 +4425,8 @@ public class InCallScreen extends Activity
         log("= PhoneApp.showBluetoothIndication: "
             + mApp.showBluetoothIndication());
         log("=");
-        if (mBluetoothAdapter != null) {
+        if (mBluetoothHandsfree != null) {
+            log("= BluetoothHandsfree.isAudioOn: " + mBluetoothHandsfree.isAudioOn());
             if (mBluetoothHeadset != null) {
                 List<BluetoothDevice> deviceList = mBluetoothHeadset.getConnectedDevices();
 
@@ -4395,19 +4442,18 @@ public class InCallScreen extends Activity
                 log("= mBluetoothHeadset is null");
             }
         } else {
-            log("= mBluetoothAdapter is null; device is not BT capable");
+            log("= mBluetoothHandsfree is null; device is not BT capable");
         }
     }
 
     /* package */ void connectBluetoothAudio() {
         if (VDBG) log("connectBluetoothAudio()...");
-        if (mBluetoothHeadset != null) {
-            // TODO(BT) check return
-            mBluetoothHeadset.connectAudio();
+        if (mBluetoothHandsfree != null) {
+            mBluetoothHandsfree.userWantsAudioOn();
         }
 
         // Watch out: The bluetooth connection doesn't happen instantly;
-        // the connectAudio() call returns instantly but does its real
+        // the userWantsAudioOn() call returns instantly but does its real
         // work in another thread.  The mBluetoothConnectionPending flag
         // is just a little trickery to ensure that the onscreen UI updates
         // instantly. (See isBluetoothAudioConnectedOrPending() above.)
@@ -4417,8 +4463,8 @@ public class InCallScreen extends Activity
 
     /* package */ void disconnectBluetoothAudio() {
         if (VDBG) log("disconnectBluetoothAudio()...");
-        if (mBluetoothHeadset != null) {
-            mBluetoothHeadset.disconnectAudio();
+        if (mBluetoothHandsfree != null) {
+            mBluetoothHandsfree.userWantsAudioOff();
         }
         mBluetoothConnectionPending = false;
     }
@@ -4796,5 +4842,67 @@ public class InCallScreen extends Activity
      */
     public boolean isQuickResponseDialogShowing() {
         return mRespondViaSmsManager != null && mRespondViaSmsManager.isShowingPopup();
+    }
+
+    // Engle, 添加感应接听来电
+    private void attachProximityListener() {
+        if (mProximityRingingCall) {
+            mProximityListener = new SensorEventListener() {
+                private boolean proximityFirstEvent = true;
+                private long lastProximityAnswerTime = 0;
+                @Override
+                public void onSensorChanged(SensorEvent event) {
+                    if (proximityFirstEvent) {
+                        proximityFirstEvent = false;
+                        return;
+                    }
+                    long milliseconds = SystemClock.elapsedRealtime();
+                    float distance = event.values[0];
+                    long timeSinceLastEvent = milliseconds - mLastProximityEventTime;
+                    mLastProximityEventTime = milliseconds;
+                    Sensor proximitySensor = getSensorManager().getDefaultSensor(
+                            Sensor.TYPE_PROXIMITY);
+
+                    // compare against getMaximumRange to support sensors that
+                    // only return 0 or 1
+                    float maxRange = proximitySensor.getMaximumRange();
+                    boolean active = (distance >= 0.0f && distance < PROXIMITY_THRESHOLD &&
+                            distance < maxRange);
+                    Log.d(LOG_TAG, "distance:" + distance + " timeSinceLastEvent:"
+                            + timeSinceLastEvent + " getMaximumRange:" + maxRange);
+
+                    if (timeSinceLastEvent < PROXIMITY_SENSOR_DELAY && active) {
+                        if (mCM.hasActiveRingingCall()) {
+                            // 防止段时间内多次调用应答
+                            if (milliseconds - lastProximityAnswerTime > 5000
+                                    || 0 == lastProximityAnswerTime) {
+                                Log.d(LOG_TAG, "Automatic answer ring, lastProximityAnswerTime:"
+                                        + lastProximityAnswerTime);
+                                lastProximityAnswerTime = SystemClock.elapsedRealtime();
+                                handleCallKey();
+                            }
+                        }
+                    }
+                }
+
+                @Override
+                public void onAccuracyChanged(Sensor sensor, int accuracy) {
+                    // TODO Auto-generated method stub
+
+                }
+
+            };
+            // Register the sensor listener and start to get values
+            getSensorManager().registerListener(mProximityListener,
+                    getSensorManager().getDefaultSensor(Sensor.TYPE_PROXIMITY),
+                    SensorManager.SENSOR_DELAY_NORMAL);
+        }
+    }
+
+    private void detachProximityListener() {
+        if (mProximityListener != null) {
+            getSensorManager().unregisterListener(mProximityListener);
+            mProximityListener = null;
+        }
     }
 }

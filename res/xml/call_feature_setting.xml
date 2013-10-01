@@ -247,4 +247,26 @@
             android:targetClass="com.android.phone.CdmaCallOptions"/>
     </PreferenceScreen>
 
+    <!-- Engle, 添加IP电话设置 -->
+    <PreferenceCategory android:title="@string/ip_phone_setting_dialog_title" >
+        <CheckBoxPreference
+            android:key="apply_ip_phone"
+            android:summary="@string/ip_phone_setting_dialog_enable"
+            android:title="@string/ip_phone_setting_dialog_enable" />
+
+        <EditTextPreference
+            android:key="ip_phone_number_edit"
+            android:title="@string/ip_phone_setting_dialog_ip_number" />
+    </PreferenceCategory>
+
+
+    <!-- Engle, 添加感应接听来电 -->
+    <PreferenceCategory android:title="@string/proximity_accept_ring_title" >
+        <CheckBoxPreference
+            android:key="apply_proximity_accept_ring"
+            android:summary="@string/proximity_accept_ring_sum"
+            android:title="@string/proximity_accept_ring_title"
+            android:persistent="true"
+            android:defaultValue="false" />
+    </PreferenceCategory>
 </PreferenceScreen>

@@ -44,19 +44,27 @@ import android.os.Message;
 import android.os.UserHandle;
 import android.os.Vibrator;
 import android.preference.CheckBoxPreference;
+//Engle, 添加IP拨号支持
+import android.preference.EditTextPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
+import android.preference.PreferenceCategory;
 import android.preference.PreferenceGroup;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.provider.Settings.SettingNotFoundException;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
 import android.util.Log;
+//Engle, 添加IP拨号支持
+import android.view.LayoutInflater;
 import android.view.MenuItem;
+//Engle, 添加IP拨号支持
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.ListAdapter;
 
@@ -218,6 +226,10 @@ public class CallFeaturesSetting extends PreferenceActivity
     public static final String HAC_VAL_ON = "ON";
     public static final String HAC_VAL_OFF = "OFF";
 
+    // Engle, 添加感应接听来电
+    private CheckBoxPreference mButtonUseProximityAction;
+    public final static String USE_PROXIMITY_ACTION = "apply_proximity_accept_ring";
+
     /** Handle to voicemail pref */
     private static final int VOICEMAIL_PREF_ID = 1;
     private static final int VOICEMAIL_PROVIDER_CFG_ID = 2;
@@ -293,6 +305,12 @@ public class CallFeaturesSetting extends PreferenceActivity
     private SipSharedPreferences mSipSharedPreferences;
     private ListPreference mFlipAction;
     private PreferenceScreen mButtonBlacklist;
+
+    // Engle, 添加IP拨号支持
+    private CheckBoxPreference mButtonUseIpPhone;
+    private EditTextPreference mIpPhoneNumber;
+    private final String BUTTON_USE_IP_PHONE = "apply_ip_phone";
+    private final String EDITOR_IP_PHONE_NUMBER = "ip_phone_number_edit";
 
     private class VoiceMailProvider {
         public VoiceMailProvider(String name, Intent intent) {
@@ -557,6 +575,8 @@ public class CallFeaturesSetting extends PreferenceActivity
                 // This should let the preference use default behavior in the xml.
                 return false;
             }
+        } else if (preference == mButtonUseProximityAction) { // Engle, 添加感应接听来电
+            return true;
         }
         return false;
     }
@@ -628,6 +648,17 @@ public class CallFeaturesSetting extends PreferenceActivity
             updateFlipActionSummary((String) objValue);
         } else if (preference == mButtonVoiceQuality) {
             updateVoiceQualitySummary((String) objValue);
+        } else if (preference == mButtonUseIpPhone) {// Engle, 添加IP拨号支持
+            boolean useIpPhone = ((Boolean) objValue).booleanValue();
+            Settings.System.putInt(mPhone.getContext().getContentResolver(),
+                    Settings.System.PHONE_CALL_WITH_IP_NUMBER, useIpPhone ? 1 : 0);
+        } else if (preference == mIpPhoneNumber) {// Engle, 添加IP拨号支持
+            String ipNumber = (String) objValue;
+            Settings.System.putString(mPhone.getContext().getContentResolver(),
+                    Settings.System.PHONE_IP_NUMBER,
+                    ipNumber);
+            mIpPhoneNumber.setText(ipNumber);
+            mIpPhoneNumber.setSummary(ipNumber);
         }
         // always let the preference setting proceed.
         return true;
@@ -1584,6 +1615,33 @@ public class CallFeaturesSetting extends PreferenceActivity
             }
         }
 
+        // Engle, 添加IP拨号支持
+        mButtonUseIpPhone = (CheckBoxPreference) findPreference(BUTTON_USE_IP_PHONE);
+
+        if (mButtonUseIpPhone != null) {
+            int useIpPhone = Settings.System.getInt(getContentResolver(),
+                    Settings.System.PHONE_CALL_WITH_IP_NUMBER, 0);
+            mButtonUseIpPhone.setChecked(1 == useIpPhone);
+            mButtonUseIpPhone.setOnPreferenceChangeListener(this);
+        }
+
+        mIpPhoneNumber = (EditTextPreference) findPreference(EDITOR_IP_PHONE_NUMBER);
+        if (mIpPhoneNumber != null) {
+            String ipNumber = Settings.System.getString(getContentResolver(),
+                    Settings.System.PHONE_IP_NUMBER);
+            mIpPhoneNumber.setText((null == ipNumber ? "" : ipNumber));
+            mIpPhoneNumber.setSummary((null == ipNumber ? "" : ipNumber));
+            mIpPhoneNumber.setOnPreferenceChangeListener(this);
+        }
+
+        // Engle, 添加感应接听来电
+        mButtonUseProximityAction = (CheckBoxPreference) findPreference(USE_PROXIMITY_ACTION);
+        if (mButtonUseProximityAction != null) {
+            boolean useFlipAction = PreferenceManager.getDefaultSharedPreferences(this)
+                    .getBoolean(CallFeaturesSetting.USE_PROXIMITY_ACTION, false);
+            mButtonUseProximityAction.setChecked(useFlipAction);
+        }
+
         mDialpadAutocomplete = (CheckBoxPreference) findPreference(BUTTON_DIALPAD_AUTOCOMPLETE);
         mButtonDTMF = (ListPreference) findPreference(BUTTON_DTMF_KEY);
         mButtonAutoRetry = (CheckBoxPreference) findPreference(BUTTON_RETRY_KEY);
@@ -1973,7 +2031,7 @@ public class CallFeaturesSetting extends PreferenceActivity
 
     private boolean isAirplaneModeOn() {
         return Settings.System.getInt(getContentResolver(),
-                Settings.System.AIRPLANE_MODE_ON, 0) != 0;
+                Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
     }
 
     private void handleTTYChange(Preference preference, Object objValue) {

@@ -139,4 +139,20 @@
     <string name="phone_number_label">My phone number</string>
     <string name="phone_number_summary">Set the phone number for this device</string>
     <string name="msisdn_alpha_tag" translatable="false">Voice Line 1</string>
+
+    <!-- Engle,  添加IP拨号支持 -->
+    <string name="ip_phone_setting_dialog_title">IP phone settings</string>
+    <string name="ip_phone_setting_dialog_enable">Enable IP phone</string>
+    <string name="ip_phone_setting_dialog_ip_number">IP number</string>
+
+    <!-- Engle, 添加电话归属地 -->
+    <string name="dialer_ui_geo_label_format" formatted="false">%S Location: %S</string>
+
+    <!-- Engle, 添加感应接听来电 -->
+    <string name="proximity_accept_ring_sum">The phone close to the face will automatically answer an incoming call.</string>
+    <string name="proximity_accept_ring_title">Enable proximity to answer</string>
+
+    <!-- Engle, 添加通话录音 -->
+    <string name="onscreenRecordText">Call record</string>
+
 </resources>

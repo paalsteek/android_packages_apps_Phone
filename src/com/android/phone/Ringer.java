@@ -35,6 +35,7 @@ import android.os.SystemVibrator;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.Log;
+import com.android.phone.PhoneGlobals;
 
 import com.android.internal.telephony.Phone;
 /**
@@ -230,6 +231,21 @@ public class Ringer {
                     mFirstRingEventTime = SystemClock.elapsedRealtime();
                 }
             }
+            // Engle, 如果插入耳机避免音量过大
+            PhoneGlobals app = PhoneGlobals.getInstance();
+            if (app.isHeadsetPlugged()) {
+                int oriVolume = ringerVolume;
+                int headsetVolume = Settings.System.getInt(mContext.getContentResolver(),
+                        Settings.System.VOLUME_BLUETOOTH_SCO, 2);
+                int maxVolume = (int) (mAudioManager.getStreamMaxVolume(AudioManager.STREAM_RING) * 0.3);
+                maxVolume = maxVolume < headsetVolume ? maxVolume : headsetVolume;
+                if (ringerVolume > maxVolume) {
+                    ringerVolume = maxVolume;
+                }
+                if (oriVolume != ringerVolume) {
+                    mAudioManager.setStreamVolume(AudioManager.STREAM_RING, ringerVolume, 0);
+                }
+            }
         }
     }
 
@@ -352,16 +368,37 @@ public class Ringer {
                 public void handleMessage(Message msg) {
                     switch (msg.what) {
                         case INCREASE_RING_VOLUME:
-                            int ringerVolume = mAudioManager.getStreamVolume(AudioManager.STREAM_RING);
+                            int ringerVolume = mAudioManager
+                                    .getStreamVolume(AudioManager.STREAM_RING);
+                            int oriVolume = ringerVolume;
                             if (mRingerVolumeSetting > 0 && ringerVolume < mRingerVolumeSetting) {
                                 ringerVolume++;
                                 if (DBG) {
                                     log("increasing ring volume to " +
                                             ringerVolume + "/" + mRingerVolumeSetting);
                                 }
-                                mAudioManager.setStreamVolume(AudioManager.STREAM_RING, ringerVolume, 0);
+                                // Engle, 如果插入耳机避免音量过大
+                                PhoneGlobals app = PhoneGlobals.getInstance();
+                                if (app.isHeadsetPlugged()) {
+                                    int headsetVolume = Settings.System.getInt(
+                                            mContext.getContentResolver(),
+                                            Settings.System.VOLUME_BLUETOOTH_SCO, 2);
+                                    int maxVolume = (int) (mAudioManager
+                                            .getStreamMaxVolume(AudioManager.STREAM_RING) * 0.3);
+                                    maxVolume = maxVolume < headsetVolume ? maxVolume
+                                            : headsetVolume;
+                                    if (ringerVolume > maxVolume) {
+                                        ringerVolume = maxVolume;
+                                    }
+                                }
+                                // Engle, 如果插入耳机避免音量过大
+                                if (oriVolume != ringerVolume) {
+                                    mAudioManager.setStreamVolume(AudioManager.STREAM_RING,
+                                            ringerVolume, 0);
+                                }
                                 if (mRingIncreaseInterval > 0) {
-                                    sendEmptyMessageDelayed(INCREASE_RING_VOLUME, mRingIncreaseInterval);
+                                    sendEmptyMessageDelayed(INCREASE_RING_VOLUME,
+                                            mRingIncreaseInterval);
                                 }
                             }
                             break;

@@ -33,6 +33,8 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemProperties;
+// Engle, 添加IP拨号支持
+import android.provider.Settings;
 import android.os.UserHandle;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
@@ -409,6 +411,16 @@ public class OutgoingCallBroadcaster extends Activity
             if (!PhoneNumberUtils.isUriNumber(number)) {
                 number = PhoneNumberUtils.convertKeypadLettersToDigits(number);
                 number = PhoneNumberUtils.stripSeparators(number);
+
+                // Engle, 添加IP拨号支持
+                boolean enableUseIP = Settings.System.getInt(getApplicationContext()
+                        .getContentResolver(),
+                        Settings.System.PHONE_CALL_WITH_IP_NUMBER, 0) == 1 ? true : false;
+                boolean ignoreUseIPDial = intent.getBooleanExtra("ignoreUseIPDial", (!enableUseIP));
+                Log.d(TAG, "The ignoreUseIPDial: " + ignoreUseIPDial);
+                if (!ignoreUseIPDial) {
+                    number = PhoneNumberUtils.appendIPNumber(getApplicationContext(), number);
+                }
             }
         } else {
             Log.w(TAG, "The number obtained from Intent is null.");
