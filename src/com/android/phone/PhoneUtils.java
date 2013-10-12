@@ -136,7 +136,7 @@ public class PhoneUtils {
     private static boolean sIsNoiseSuppressionEnabled = true;
 
     //Engle, 添加通话录音
-    private static MediaRecorder recorder = null;
+    private static MediaRecorder mRecorder = null;
     private static boolean isRecording = false;
 
     /**
@@ -2095,40 +2095,55 @@ public class PhoneUtils {
     static boolean isRecording() {
         if (DBG)
             Log.d(LOG_TAG, "isRecording: " + isRecording + " recorder: "
-                    + ((null == recorder) ? "null" : recorder));
-        return isRecording && (null != recorder);
+                    + ((null == mRecorder) ? "null" : mRecorder));
+        return isRecording && (null != mRecorder);
     }
 
     /**
-     * Engle, 添加通话录音
      * Turns on/off call record.
      *
      * @param flag True when speaker should be on. False otherwise.
      */
     static void turnOnRecord(boolean flag) {
-        try {
-            if (flag) {
-                File file = new File(Environment.getExternalStorageDirectory(),
-                        "CallRecord_" + System.currentTimeMillis() + ".3gp");
-                recorder = new MediaRecorder();
-                recorder.setAudioSource(AudioSource.MIC);// 声音采集来源(话筒)
-                recorder.setOutputFormat(OutputFormat.THREE_GPP);// 输出的格式
-                recorder.setAudioEncoder(AudioEncoder.AMR_NB);// 音频编码方式
-                recorder.setOutputFile(file.getAbsolutePath());// 输出方向
-                recorder.prepare();
-                recorder.start();
-            } else {
-                if (recorder != null) {
-                    if (isRecording)
-                        recorder.stop();
-                    recorder.release();
-                    recorder = null;
-                }
+        if (flag) {
+            File file = new File(Environment.getExternalStorageDirectory(),
+                    "CallRecord_" + System.currentTimeMillis() + ".3gpp");
+            mRecorder = new MediaRecorder();
+            mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);// 声音采集来源(话筒)
+            mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);// 输出的格式
+            mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);// 音频编码方式
+            mRecorder.setOutputFile(file.getAbsolutePath());// 输出方向
+            // Handle IOException
+            try {
+                mRecorder.prepare();
+            } catch (IOException exception) {
+                Log.e(LOG_TAG, "", exception);
+                mRecorder.reset();
+                mRecorder.release();
+                mRecorder = null;
+                isRecording = false;
+                return;
             }
-            isRecording = flag;
-        } catch (Exception e) {
-            Log.e(LOG_TAG, " turnOnRecord", e);
+            // Handle RuntimeException if the recording couldn't start
+            try {
+                mRecorder.start();
+            } catch (RuntimeException exception) {
+                Log.e(LOG_TAG, "", exception);
+                mRecorder.reset();
+                mRecorder.release();
+                mRecorder = null;
+                isRecording = false;
+                return;
+            }
+        } else {
+            if (mRecorder != null) {
+                if (isRecording)
+                    mRecorder.stop();
+                mRecorder.release();
+                mRecorder = null;
+            }
         }
+        isRecording = flag;
     }
 
     /* package */ static void setAudioMode() {
